@@ -1,60 +1,206 @@
 <html>
 
 <head>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" />
+    <style>
+        #hasil {
+            display: none;
+        }
+
+        .form-check-input,
+        .form-check-label {
+            cursor: pointer;
+        }
+    </style>
 </head>
 
 <body style="background-color: #333;" class="p-5">
-    <div class="container">
-        <div class="row">
+    <div class="container" id="app">
+        <h2 class="text-white text-center">Simulasi Gerak Peluru</h2>
+        <div class="row my-5">
             <div class="col">
                 <div class="card">
-                    <form class="card-body">
+                    <form class="card-body" @submit.prevent="hitung">
                         <div class="row">
                             <div class="form-group col">
                                 Kecepatan
-                                <input type="number" class="form-control">
+                                <input type="number" step="any" class="form-control" v-model.number="v" required />
                             </div>
                             <div class="form-group col">
                                 Sudut
-                                <input type="number" class="form-control">
+                                <input type="number" step="any" class="form-control" v-model.number="a" required />
                             </div>
                         </div>
                         <div class="row">
                             <div class="form-group col">
                                 &#916;t
-                                <input type="number" class="form-control">
+                                <input type="number" step="any" class="form-control" v-model.number="dt" required />
                             </div>
                             <div class="form-group col">
                                 Gravitasi
-                                <input type="number" class="form-control">
+                                <input type="number" step="any" class="form-control" v-model.number="g" required />
                             </div>
                         </div>
                         <div class="row">
                             <div class="form-group col">
-                                <input type="number" class="form-control">
+                                <div class="form-check form-check-inline">
+                                    <input type="checkbox" class="form-check-input" id="check" v-model="hambatan" />
+                                    <label class="form-check-label" for="check">Hambatan Udara</label>
+                                </div>
                             </div>
                         </div>
-                        <div class="row">
+                        <div class="row" v-show="hambatan">
                             <div class="form-group col">
-                                &#916;t
-                                <input type="number" class="form-control">
+                                Massa
+                                <input type="number" step="any" class="form-control" v-model.number="m" required />
                             </div>
                             <div class="form-group col">
-                                Gravitasi
-                                <input type="number" class="form-control">
+                                D
+                                <input type="number" step="any" class="form-control" v-model.number="d" required />
                             </div>
                         </div>
+                        <button type="submit" class="btn btn-primary form-control">
+                            Hitung
+                        </button>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="row" id="hasil">
+            <div class="col">
+                <div class="card">
+                    <div class="card-body" id="chart"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
-    <script></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/gasparesganga-jquery-loading-overlay@2.1.6/dist/loadingoverlay.min.js"></script>
+    <script>
+        new Vue({
+            el: "#app",
+            data: {
+                v: 50,
+                a: 35,
+                dt: 0.01,
+                g: 9.806,
+                hambatan: false,
+                m: 0.15,
+                d: 0.0013
+            },
+            computed: {
+                radiant() {
+                    return (Math.PI / 180) * this.a;
+                }
+            },
+            methods: {
+                av(vx, vy) {
+                    return Math.sqrt(Math.pow(vx, 2) + Math.pow(vy, 2));
+                },
+                ax(vx, vy) {
+                    return this.hambatan ? -(this.d / this.m) * this.av(vx, vy) * vx : 0;
+                },
+                ay(vx, vy) {
+                    return this.hambatan ? -this.g - (this.d / this.m) * this.av(vx, vy) * vy : -this.g;
+                },
+                incTime(t, dt) {
+                    var comma = `${dt}`.split(".");
+                    var fixed = comma.length > 1 ? comma[1].length : 0;
+
+                    return parseFloat((t + this.dt).toFixed(fixed));
+                },
+                analitik(x, y, t, vx, vy) {
+                    data = [{ x, y, z: t }];
+
+                    while (y >= 0) {
+                        t = this.incTime(t, this.dt);
+
+                        x = vx * t + 0.5 * this.ax(vx, vy) * Math.pow(t, 2);
+                        y = vy * t + 0.5 * this.ay(vx, vy) * Math.pow(t, 2);
+
+                        data.push({ x, y, z: t });
+                    }
+
+                    return data;
+                },
+                numerik(x, y, t, vx, vy) {
+                    data = [{ x, y, z: t }];
+
+                    vx0 = vx;
+                    vy0 = vy;
+
+                    while (y >= 0) {
+                        t = this.incTime(t, this.dt);
+
+                        vx = vx + this.ax(vx0, vy0) * this.dt;
+                        vy = vy + this.ay(vx0, vy0) * this.dt;
+
+                        x = x + vx * this.dt;
+                        y = y + vy * this.dt;
+
+                        data.push({ x, y, z: t });
+                    }
+
+                    return data;
+                },
+                hitung() {
+                    $("#hasil").slideUp("slow", () => {
+                        $.LoadingOverlay("show");
+                        $("#chart").html("").promise().then(() => {
+                            t = 0;
+                            x = 0;
+                            y = 0;
+
+                            vx = this.v * Math.cos(this.radiant);
+                            vy = this.v * Math.sin(this.radiant);
+
+                            this.chart(x, y, t, vx, vy).render().then(() => {
+                                $("#hasil").slideDown("slow", () => {
+                                    $.LoadingOverlay("hide");
+                                    setTimeout(() => {
+                                        $("html, body").animate({ scrollTop: $("#chart").offset().top }, "slow");
+                                    }, 500);
+                                });
+                            });
+                        });
+                    });
+                },
+                chart(x, y, t, vx, vy) {
+                    return new ApexCharts(
+                        document.querySelector("#chart"),
+                        {
+                            series: [
+                                {
+                                    name: "Analitik",
+                                    data: this.analitik(x, y, t, vx, vy)
+                                },
+                                {
+                                    name: "Numerik",
+                                    data: this.numerik(x, y, t, vx, vy)
+                                }
+                            ],
+                            chart: { type: "line" },
+                            title: { text: "Hasil" },
+                            xaxis: { labels: { hideOverlappingLabels: true } },
+                            yaxis: { decimalsInFloat: 0 },
+                            tooltip: {
+                                x: { formatter: x => x },
+                                y: { formatter: y => y },
+                                z: { title: "Time" }
+                            }
+                        }
+                    );
+                }
+            }
+        });
+    </script>
 </body>
 
 </html>
